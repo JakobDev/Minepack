@@ -16,7 +16,7 @@ local function completeMultipleChoice( sText, tOptions, bAddSpaces )
     end
     return tResults
 end
-local tMinepack = {"install","remove","update","fetch","list","search","info","help"}
+local tMinepack = {"install","remove","update","fetch","list","search","info","file","log","help","version"}
 local function completeMinepack( shell, nIndex, sText, tPreviousText )
     if nIndex == 1 then
         return completeMultipleChoice( sText, tMinepack, true, true )
