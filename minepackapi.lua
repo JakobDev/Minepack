@@ -204,21 +204,37 @@ local function newTransaction(pack, path, type, contents, version)
 	return transaction
 end
 
-function loadConfig(sPath,sDefault)
+local function loadConfig(sPath,sDefault)
 if not fs.exists(sPath) then
     local writefi = fs.open(sPath,"w")
     writefi.write(sDefault)
     writefi.close()
 end
-local fileh = io.open(sPath)
+local fileh = io.open(sPath,"r")
 for linecon in fileh:lines() do
     if linecon:find("#") ~= 1 then
         local sHead, sBody = linecon:match("([^=]+)=([^=]+)")
-        minepackapi.config[sHead] = sBody
+        config[sHead] = sBody
     end
 end
 fileh:close()
 end
+
+loadConfig("/etc/minepack/config.conf",[[
+#Warning: If you edit the Path, you might have Problems 
+#with removing a Package. Plese move all files to the
+#new location, if you edit the Path.
+#
+#Set the default target
+defaultTarget=/usr/bin
+#Set the Path for Help Files
+helpPath=/usr/help/
+#Write a Log
+writeLog=true
+#Select the Directory, in which minepack should
+#place his files
+minepackDirectory=/var/minepack
+]])
 
 local TransQueue = {
 	addFile = function(self, path, contents, version)
@@ -596,6 +612,9 @@ local new_fs = {}
 
 local Package = {
 	install = function(self, env)
+        if fs.getFreeSpace(self.target) < tonumber(self.size) then
+            error("Not enough free space",0)
+        end
 		local queue
 		if downloadFunctions[self.download.type.type] then
 			queue = newTransactionQueue(self.fullName)
