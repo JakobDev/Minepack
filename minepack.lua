@@ -1,21 +1,5 @@
 os.loadAPI("/usr/apis/minepackapi")
 
-minepackapi.loadConfig("/etc/minepack/config.conf",[[
-#Warning: If you edit the Path, you might have Problems 
-#with removing a Package. Plese move all files to the
-#new location, if you edit the Path.
-#
-#Set the default target
-defaultTarget=/usr/bin
-#Set the Path for Help Files
-helpPath=/usr/help/
-#Write a Log
-writeLog=true
-#Select the Directory, in which minepack should
-#place his files
-minepackDirectory=/var/minepack
-]])
-
 if not fs.exists("/etc/minepack/sources.list") then
 local writeh = fs.open("/etc/minepack/sources.list","w")
 writeh.write([[
@@ -47,7 +31,7 @@ local function getPackageName(sName)
 sName = sName:lower()
 if minepackapi.list[sName] == nil then
     printError("Package not found")
-    error()
+    error("",0)
 end
 local sPack = minepackapi.list[sName]["fullName"]
 if sPack == nil then
@@ -69,9 +53,16 @@ if minepackapi.installed[sPack] and not bForce then
     print("Package "..sPack.." is already installed")
     return
 end
-for k,v in pairs(minepackapi.findDependencies(sPack)) do
-    print("Install "..k)
-    minepackapi.list[k]:install(getfenv())
+local dep,err = minepackapi.findDependencies(sPack)
+if not dep then
+    printError("Could not resolve dependency on "..err.." in package "..sPack)
+    return
+end
+for k,v in pairs(dep) do
+    if type(minepackapi.installed[k]) ~= "table" then
+        print("Install "..k)
+        minepackapi.list[k]:install(getfenv())
+    end
 end
 end
 
@@ -163,20 +154,24 @@ end
 
 local function list()
 minepackapi.load()
+local sList = ""
 for k,v in pairs(minepackapi.installed) do
     if k:find("/") ~= nil then
-        print(k)
+        sList = sList..k.."\n"
     end
 end
+textutils.pagedPrint(sList:sub(1,-2))
 end
 
 local function search()
 minepackapi.load()
+local sList = ""
 for k,v in pairs(minepackapi.list) do
     if k:find("/") ~= nil then
-        print(k)
+        sList = sList..k.."\n"
     end
 end
+textutils.pagedPrint(sList:sub(1,-2))
 end
 
 local function info(sName)
@@ -196,7 +191,7 @@ local function info(sName)
     print()
     print("Version: "..info.version)
     print("Size: "..info.size.." Bytes")
-    print("Target: "..info.target)
+    print("Target: /"..fs.combine(info.target,""))
     print("Filename: "..info.download.type.filename)
     io.write("Dependecies: ")
     local testdep = false
@@ -221,15 +216,47 @@ local function file(sName)
         sName = sName:sub(2)
     end
     minepackapi.load()
+    local bFound = false
     for k,v in pairs(minepackapi.list) do
         if k:find("/") ~= nil then
             if type(v.target) == "string" and type(v.download.type.filename) == "string" then
                 if fs.combine(v.target,v.download.type.filename):find(sName) ~= nil then
                     print(k)
+                    bFound = true
                 end
-                --print(fs.combine(v.target,v.download.type.filename))
             end
         end
+    end
+    if not bFound then
+        print("This File was not found in a Package")
+    end
+end
+
+local function download(sName)
+    if sName ==nil then
+        printError("Usage: minepack remove <package>")
+        return
+    end
+    minepackapi.load()
+    if minepackapi.list[sName] == nil then
+        printError("Package not found")
+        error("",0)
+    end
+    local sPack = getPackageName(sName)
+    if minepackapi.list[sPack]["download"]["type"]["type"] == "raw" then
+        if downloadFile(minepackapi.list[sPack]["download"]["type"]["url"],fs.combine(shell.dir(),minepackapi.list[sPack]["download"]["type"]["filename"])) == "false" then
+            printError("Could not download "..minepackapi.list[sPack]["download"]["type"]["url"])
+        else
+            print("Downloaded as "..minepackapi.list[sPack]["download"]["type"]["filename"])
+        end
+    elseif minepackapi.list[sPack]["download"]["type"]["type"] == "pastebin" then
+        if downloadFile("https://pastebin.com/raw/"..minepackapi.list[sPack]["download"]["type"]["url"],fs.combine(shell.dir(),minepackapi.list[sPack]["download"]["type"]["filename"])) == "false" then
+            printError("Could not download https://pastebin.com/raw/"..minepackapi.list[sPack]["download"]["type"]["url"])
+        else
+            print("Downloaded as "..minepackapi.list[sPack]["download"]["type"]["filename"])
+        end
+    else
+        print("Package Type not suported")
     end
 end
 
@@ -261,9 +288,11 @@ minepack list
 minepack search
 minepack info <package>
 minepack file <file>
+minepack download <package>
 minepack log
 minepack help
-minepack version]])
+minepack version
+]])
 end
 
 local tArgs = {...}
@@ -287,12 +316,14 @@ elseif tArgs[1] == "info" then
     info(tArgs[2])
 elseif tArgs[1] == "file" then
     file(tArgs[2])
+elseif tArgs[1] == "download" then
+    download(tArgs[2])
 elseif tArgs[1] == "log" then
     log()
 elseif tArgs[1] == "help" then
     help()
 elseif tArgs[1] == "version" then
-    print("Version 1.1")
+    print("Version 1.2")
 else
     print("Unknown Command. Please run minepack help for a list of Commands")
 end
